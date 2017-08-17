@@ -1,6 +1,6 @@
-'''FPN in PyTorch.
+'''RetinaFPN in PyTorch.
 
-See the paper "Feature Pyramid Networks for Object Detection" for more details.
+See the paper "Focal Loss for Dense Object Detection" for more details.
 '''
 import torch
 import torch.nn as nn
@@ -37,30 +37,30 @@ class Bottleneck(nn.Module):
         return out
 
 
-class FPN(nn.Module):
+class RetinaFPN(nn.Module):
     def __init__(self, block, num_blocks):
-        super(FPN, self).__init__()
+        super(RetinaFPN, self).__init__()
         self.in_planes = 64
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
 
         # Bottom-up layers
-        self.layer1 = self._make_layer(block,  64, num_blocks[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        self.layer2 = self._make_layer(block,  64, num_blocks[0], stride=1)
+        self.layer3 = self._make_layer(block, 128, num_blocks[1], stride=2)
+        self.layer4 = self._make_layer(block, 256, num_blocks[2], stride=2)
+        self.layer5 = self._make_layer(block, 512, num_blocks[3], stride=2)
+        self.conv6 = nn.Conv2d(2048, 256, kernel_size=3, stride=2, padding=1)
+        self.conv7 = nn.Conv2d( 256, 256, kernel_size=3, stride=2, padding=1)
 
-        # Top-down layers, use nn.ConvTranspose2d to replace nn.Conv2d+F.upsample?
+        # TODO: merge toplayer1 & conv6?
         self.toplayer1 = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)  # Reduce channels
         self.toplayer2 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
         self.toplayer3 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
-        self.toplayer4 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
 
         # Lateral layers
         self.latlayer1 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)
         self.latlayer2 = nn.Conv2d( 512, 256, kernel_size=1, stride=1, padding=0)
-        self.latlayer3 = nn.Conv2d( 256, 256, kernel_size=1, stride=1, padding=0)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -74,28 +74,28 @@ class FPN(nn.Module):
         # Bottom-up
         c1 = F.relu(self.bn1(self.conv1(x)))
         c1 = F.max_pool2d(c1, kernel_size=3, stride=2, padding=1)
-        c2 = self.layer1(c1)
-        c3 = self.layer2(c2)
-        c4 = self.layer3(c3)
-        c5 = self.layer4(c4)
+        c2 = self.layer2(c1)
+        c3 = self.layer3(c2)
+        c4 = self.layer4(c3)
+        c5 = self.layer5(c4)
+        p6 = self.conv6(c5)
+        p7 = self.conv7(F.relu(p6))
         # Top-down
         p5 = self.toplayer1(c5)
         p4 = F.upsample(p5, scale_factor=2) + self.latlayer1(c4)
         p4 = self.toplayer2(p4)
         p3 = F.upsample(p4, scale_factor=2) + self.latlayer2(c3)
         p3 = self.toplayer3(p3)
-        p2 = F.upsample(p3, scale_factor=2) + self.latlayer3(c2)
-        p2 = self.toplayer4(p2)
-        return p2, p3, p4, p5
+        return p3, p4, p5, p6, p7
 
 
-def FPN101():
+def RetinaFPN101():
     # return FPN(Bottleneck, [2,4,23,3])
-    return FPN(Bottleneck, [2,2,2,2])
+    return RetinaFPN(Bottleneck, [2,2,2,2])
 
 
 def test():
-    net = FPN101()
+    net = RetinaFPN101()
     fms = net(Variable(torch.randn(1,3,224,224)))
     for fm in fms:
         print(fm.size())
