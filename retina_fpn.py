@@ -70,28 +70,29 @@ class RetinaFPN(nn.Module):
             self.in_planes = planes * block.expansion
         return nn.Sequential(*layers)
 
-    def _add(self, x, y):
-        '''Add two feature maps.
+    def _upsample_add(self, x, y):
+        '''Upsample and add two feature maps.
 
         Args:
-          x: (Variable) upsampled feature map.
+          x: (Variable) top feature map to be upsampled.
           y: (Variable) lateral feature map.
 
         Returns:
           (Variable) added feature map.
 
-        Upsampled feature map size is always >= lateral feature map size.
-        The reason why the two feature map sizes may not equal is because when the
-        input size is odd, the upsampled feature map size is always 1 pixel
-        bigger than the original input size.
+        Note in PyTorch, when input size is odd, the upsampled feature map
+        with `F.upsample(..., scale_factor=2, mode='nearest')`
+        maybe not equal to the lateral feature map size.
 
         e.g.
         original input size: [N,_,15,15] ->
         conv2d feature map size: [N,_,8,8] ->
-        upsamped feature map size: [N,_,16,16]
+        upsampled feature map size: [N,_,16,16]
+
+        So we choose bilinear upsample which supports arbitrary output sizes.
         '''
         _,_,H,W = y.size()
-        return x[:,:,:H,:W] + y
+        return F.upsample(x, size=(H,W), mode='bilinear') + y
 
     def forward(self, x):
         # Bottom-up
@@ -105,9 +106,9 @@ class RetinaFPN(nn.Module):
         p7 = self.conv7(F.relu(p6))
         # Top-down
         p5 = self.toplayer1(c5)
-        p4 = self._add(F.upsample(p5, scale_factor=2), self.latlayer1(c4))
+        p4 = self._upsample_add(p5, self.latlayer1(c4))
         p4 = self.toplayer2(p4)
-        p3 = self._add(F.upsample(p4, scale_factor=2), self.latlayer2(c3))
+        p3 = self._upsample_add(p4, self.latlayer2(c3))
         p3 = self.toplayer3(p3)
         return p3, p4, p5, p6, p7
 
