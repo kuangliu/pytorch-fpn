@@ -51,11 +51,13 @@ class FPN(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
 
-        # Top-down layers, use nn.ConvTranspose2d to replace nn.Conv2d+F.upsample?
-        self.toplayer1 = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)  # Reduce channels
-        self.toplayer2 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
-        self.toplayer3 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
-        self.toplayer4 = nn.Conv2d( 256, 256, kernel_size=3, stride=1, padding=1)
+        # Top layer
+        self.toplayer = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)  # Reduce channels
+
+        # Smooth layers
+        self.smooth1 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.smooth2 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.smooth3 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
 
         # Lateral layers
         self.latlayer1 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)
@@ -103,13 +105,14 @@ class FPN(nn.Module):
         c4 = self.layer3(c3)
         c5 = self.layer4(c4)
         # Top-down
-        p5 = self.toplayer1(c5)
+        p5 = self.toplayer(c5)
         p4 = self._upsample_add(p5, self.latlayer1(c4))
-        p4 = self.toplayer2(p4)
         p3 = self._upsample_add(p4, self.latlayer2(c3))
-        p3 = self.toplayer3(p3)
         p2 = self._upsample_add(p3, self.latlayer3(c2))
-        p2 = self.toplayer4(p2)
+        # Smooth
+        p4 = self.smooth1(p4)
+        p3 = self.smooth2(p3)
+        p2 = self.smooth3(p2)
         return p2, p3, p4, p5
 
 
