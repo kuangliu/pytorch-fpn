@@ -109,9 +109,8 @@ class RetinaFPN(nn.Module):
         # Top-down
         p5 = self.toplayer(c5)
         p4 = self._upsample_add(p5, self.latlayer1(c4))
-        p3 = self._upsample_add(p4, self.latlayer2(c3))
-        # Smooth
         p4 = self.smooth1(p4)
+        p3 = self._upsample_add(p4, self.latlayer2(c3))
         p3 = self.smooth2(p3)
         return p3, p4, p5, p6, p7
 
